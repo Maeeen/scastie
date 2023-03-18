@@ -16,9 +16,6 @@ import play.api.libs.json.Reads
 import play.api.libs.json.Json
 import scala.util.control.NonFatal
 import com.olegych.scastie.api.Instrumentation
-import scala.collection.mutable.HashMap
-import java.io.FilterInputStream
-import com.olegych.scastie.sclirunner.InputStreamWithCallback
 import scala.concurrent.duration.Duration
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
@@ -26,14 +23,19 @@ import scala.util.Try
 import scala.util.Success
 import scala.util.Failure
 import java.util.concurrent.TimeoutException
+import scala.collection.concurrent.TrieMap
 
 
 object ScliRunner {
   case class ScliRun(output: List[String], instrumentation: Option[List[Instrumentation]] = None)
   case class ScliTask(snippetId: SnippetId, inputs: Inputs, ip: String, login: Option[String])
-  case class InstrumentationException(failure: InstrumentationFailureReport) extends Exception
 
-  case class CompilationError(problems: List[Problem]) extends Exception
+  // Errors
+  trait ScliRunnerError extends Exception
+  case class InstrumentationException(failure: InstrumentationFailureReport) extends ScliRunnerError
+  case class CompilationError(problems: List[Problem]) extends ScliRunnerError
+  // From Bsp
+  case class ErrorFromBsp(err: BspClient.BspError) extends ScliRunnerError
 }
 
 class ScliRunner {
@@ -60,7 +62,7 @@ class ScliRunner {
     ()
   }
 
-  def runTask(task: ScliTask, onOutput: String => Any): Future[ScliRun] = {
+  def runTask(task: ScliTask, onOutput: String => Any): Future[Either[ScliRun, ScliRunnerError]] = {
     log.info(s"Running task with snippetId=${task.snippetId}")
 
     // Extract directives from user code
@@ -75,7 +77,8 @@ class ScliRunner {
     }
   }
 
-  def buildAndRun(snippetId: SnippetId, inputs: Inputs, isForcedProgramMode: Boolean, userDirectives: Array[String], userCode: Array[String], onOutput: String => Any): Future[ScliRun] = {
+  def buildAndRun(snippetId: SnippetId, inputs: Inputs, isForcedProgramMode: Boolean, userDirectives: Array[String], userCode: Array[String], onOutput: String => Any)
+      : Future[Either[ScliRun, ScliRunnerError]] = {
     val runtimeDependency = inputs.target.runtimeDependency.map(Set(_)).getOrElse(Set()) ++ inputs.libraries
     val allDirectives = (runtimeDependency.map(scalaDepToFullName).map(libraryDirective) ++ userDirectives)
     val totalOffset = -runtimeDependency.size + Instrument.getExceptionLineOffset(inputs)
@@ -88,16 +91,21 @@ class ScliRunner {
     var instrumentationMem: Option[List[Instrumentation]] = None
     var outputBuffer: List[String] = List()
 
-    val build = bspClient.build(snippetId.base64UUID)
-    build.map { bspBuild =>
-      log.info(s"Running process for snippet $snippetId")
+    def forwardPrint(str: String) = {
+      outputBuffer = str :: outputBuffer
+      onOutput(str)
+    }
 
-      def forwardPrint(str: String) = {
-        onOutput(str)
-        outputBuffer = str :: outputBuffer
-      }
-        
-      val runProcess = bspBuild.process.run(
+    def handleError(bspError: BspClient.BspError): ScliRunnerError = bspError match {
+      case x: BspClient.CompilationError => 
+        CompilationError(x.toProblemList.map(pb =>
+          pb.copy(line = pb.line.map(_ + totalOffset + 1))))
+      case _ => ErrorFromBsp(bspError)
+    }
+
+    // Should be executed asynchronously due to the timeout (executed synchronously)
+    def runProcess(p: ProcessBuilder) = {
+      val runProcess = p.run(
         ProcessLogger({ line: String => {
           // extract instrumentation
           extract[List[Instrumentation]](line) match {
@@ -113,31 +121,39 @@ class ScliRunner {
       )
       javaProcesses.put(snippetId, runProcess)
 
-      // Wait for process to exit gracefully (or being killed by timeout…)
+      // Wait
       val f = Future { runProcess.exitValue() }
-      Try(Await.result(f, Duration(30, TimeUnit.SECONDS))) match {
-        case Success(value) => true
-        case Failure(_: TimeoutException) => {
-          forwardPrint("Timeout exceeded.")
-          false
+      val didSucceed =
+        Try(Await.result(f, Duration(30, TimeUnit.SECONDS))) match {
+          case Success(value) => {
+            forwardPrint(s"Process exited with error code $value")
+            true
+          }
+          case Failure(_: TimeoutException) => {
+            forwardPrint("Timeout exceeded.")
+            false
+          }
+          case Failure(e) => {
+            forwardPrint(s"Unknown exception $e")
+            false
+          }
         }
-        case Failure(e) => {
-          forwardPrint(s"Unknown exception $e")
-          false
-        }
-      }
-    } map { didFail =>
-      if (didFail) {
-        javaProcesses.get(snippetId).map(_.destroy())
+
+      if (!didSucceed) {
+        runProcess.destroy()
       }
       javaProcesses.remove(snippetId)
 
-      ScliRun(output = outputBuffer, instrumentationMem)
-    } recover {
-      case x: BspClient.CompilationError => throw CompilationError(x.toProblemList.map(pb =>
-        pb.copy(line = pb.line.map(_ + totalOffset + 1))))
-      case other => throw other
-    } 
+      ScliRun(outputBuffer, instrumentationMem)
+    }
+
+    val build = bspClient.build(snippetId.base64UUID)
+    build.map { result =>
+      result match {
+        case Right(bspError) => Right(handleError(bspError))
+        case Left(process) => Left(runProcess(process))
+      }
+    }
   }
 
   def end: Unit = {
@@ -147,7 +163,7 @@ class ScliRunner {
   }
 
   // Java processes
-  private val javaProcesses = HashMap[SnippetId, Process]() // mutable HashMap
+  private val javaProcesses = TrieMap[SnippetId, Process]() // mutable HashMap
 
   // Process streams
   private var pStdin: Option[OutputStream] = None

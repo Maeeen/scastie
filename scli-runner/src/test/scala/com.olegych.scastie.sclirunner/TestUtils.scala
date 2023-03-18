@@ -15,18 +15,18 @@ object TestUtils {
     Try(Await.result(run, Duration(35, TimeUnit.SECONDS)))
   }
 
-  def shouldNotCompile(run: Future[ScliRunner.ScliRun]): List[Problem] = {
+  def shouldNotCompile(run: Future[Either[ScliRunner.ScliRun, ScliRunner.ScliRunnerError]]): List[Problem] = {
     val result = getResultWithTimeout(run)
     result match {
-      case Failure(ScliRunner.CompilationError(problems)) => problems
+      case Success(Right(ScliRunner.CompilationError(problems))) => problems
       case _ => throw new AssertionError(s"Expected the code to not compile. Instead, got $result")
     }
   }
 
-  def shouldOutputString(run: Future[ScliRunner.ScliRun], str: String): ScliRunner.ScliRun = {
+  def shouldOutputString(run: Future[Either[ScliRunner.ScliRun, ScliRunner.ScliRunnerError]], str: String): ScliRunner.ScliRun = {
     val result = getResultWithTimeout(run)
     result match {
-      case Success(x @ ScliRunner.ScliRun(output, instrumentations)) => {
+      case Success(Left(x @ ScliRunner.ScliRun(output, instrumentations))) => {
         if (output.exists(_.contains(str))) x
         else throw new AssertionError(s"Expected the output to contain at least $str. Contained only $output")
       }
@@ -34,11 +34,11 @@ object TestUtils {
     }
   }
 
-  def shouldRun(run: Future[ScliRunner.ScliRun]) = {
+  def shouldRun(run: Future[Either[ScliRunner.ScliRun, ScliRunner.ScliRunnerError]]) = {
     shouldOutputString(run, "")
   }
 
-  def shouldTimeout(run: Future[ScliRunner.ScliRun]): Unit = {
+  def shouldTimeout(run: Future[Either[ScliRunner.ScliRun, ScliRunner.ScliRunnerError]]): Unit = {
     shouldOutputString(run, "Timeout exceeded.")
   }
 }
