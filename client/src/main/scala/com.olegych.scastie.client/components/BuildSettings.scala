@@ -5,12 +5,7 @@ import com.olegych.scastie.client.components.editor.SimpleEditor
 import japgolly.scalajs.react._
 
 import vdom.all._
-import com.olegych.scastie.api.ScalaTarget.ScalaCli
-import com.olegych.scastie.api.ScalaTarget.Typelevel
-import com.olegych.scastie.api.ScalaTarget.Native
-import com.olegych.scastie.api.ScalaTarget.Scala3
-import com.olegych.scastie.api.ScalaTarget.Jvm
-import com.olegych.scastie.api.ScalaTarget.Js
+import com.olegych.scastie.api.ScalaTarget._
 import japgolly.scalajs.react.feature.ReactFragment
 
 final case class BuildSettings(
