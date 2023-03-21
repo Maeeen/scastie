@@ -113,7 +113,10 @@ object MainPanel {
         sbtConfigChange = backend.sbtConfigChange,
         removeScalaDependency = backend.removeScalaDependency,
         updateDependencyVersion = backend.updateDependencyVersion,
-        addScalaDependency = backend.addScalaDependency
+        addScalaDependency = backend.addScalaDependency,
+
+        convertToScalaCli = backend.convertToScalaCli,
+        scalaCliConversionError = state.scalaCliConversionError
       ).render
 
     val mobileBar =

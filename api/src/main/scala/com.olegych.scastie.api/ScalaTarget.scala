@@ -74,6 +74,7 @@ object ScalaTarget {
           formatNative.writes(native) ++ JsObject(Seq("tpe" -> JsString("Native")))
         case dotty: Scala3 =>
           formatScala3.writes(dotty) ++ JsObject(Seq("tpe" -> JsString("Scala3")))
+        case scli: ScalaCli => JsObject(Seq("tpe" -> JsString("ScalaCli")))
       }
     }
 
@@ -89,6 +90,7 @@ object ScalaTarget {
                 case "Typelevel"        => formatTypelevel.reads(json)
                 case "Native"           => formatNative.reads(json)
                 case "Scala3" | "Dotty" => formatScala3.reads(json)
+                case "ScalaCli"         => JsSuccess(ScalaCli())
                 case _                  => JsError(Seq())
               }
             case _ => JsError(Seq())
@@ -296,5 +298,37 @@ object ScalaTarget {
 
     override def toString: String =
       s"Scala $scalaVersion"
+  }
+
+  object ScalaCli {
+    def default: ScalaTarget = ScalaCli()
+
+    def defaultCode: String =
+      """|// Hello!
+         |// Scastie is compatible with Scala CLI! You can use
+         |// directives: https://scala-cli.virtuslab.org/docs/guides/using-directives/
+         |
+         |println("Hi Scala CLI <3")
+      """.stripMargin
+  }
+  
+  case class ScalaCli() extends ScalaTarget {
+
+    override def scalaVersion: String = ""
+
+    override def targetType: ScalaTargetType = ScalaTargetType.ScalaCli
+
+    override def scaladexRequest: Map[String,String] = 
+      Map("target" -> "JVM")
+
+    override def renderSbt(lib: ScalaDependency): String = "// Non-applicable"
+
+    override def sbtConfig: String = "// Non-applicable"
+
+    override def sbtPluginsConfig: String = "// Non-applicable"
+
+    override def sbtRunCommand(worksheetMode: Boolean): String = ???
+
+    override def toString: String = "Scala-CLI"
   }
 }
