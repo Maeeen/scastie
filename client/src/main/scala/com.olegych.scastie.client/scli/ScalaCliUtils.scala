@@ -10,7 +10,6 @@ object ScalaCliUtils {
     val Inputs(_isWorksheetMode, code, target, libraries, librariesFromList, sbtConfigExtra, sbtConfigSaved, sbtPluginsConfigExtra, sbtPluginsConfigSaved, isShowingInUserProfile, forked) = in
 
     if (sbtConfigExtra.size > 0 && sbtConfigExtra != Inputs.default.sbtConfigExtra) {
-      println("ok")
       Right("Custom SBT config is not supported in Scala-CLI")
     } else if (target.targetType == ScalaTargetType.ScalaCli) {
       Right("Already a Scala-CLI snippet.")
