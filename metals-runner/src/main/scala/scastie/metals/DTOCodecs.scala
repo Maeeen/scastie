@@ -14,7 +14,7 @@ object DTOCodecs {
     final def apply(c: HCursor): Decoder.Result[ScalaTarget] =
       val res = for {
         tpe          <- c.downField("tpe").as[String]
-        scalaVersion <- c.downField("scalaVersion").as[String]
+        scalaVersion <- if tpe == "ScalaCli" then "".asInstanceOf[Decoder.Result[String]] else c.downField("scalaVersion").as[String]
       } yield tpe -> scalaVersion
 
       res.flatMap((tpe, scalaVersion) =>
@@ -24,6 +24,7 @@ object DTOCodecs {
           case "Typelevel" => Right(ScalaTarget.Typelevel(scalaVersion))
           case "Native"    => c.downField("scalaNativeVersion").as[String].map(ScalaTarget.Native(scalaVersion, _))
           case "Scala3" | "Dotty" => Right(ScalaTarget.Scala3(scalaVersion))
+          case "ScalaCli"  => Right(ScalaTarget.ScalaCli())
         }
       )
 

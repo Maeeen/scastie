@@ -107,8 +107,13 @@ class ScliRunner {
           if (line <= allDirectives.size) // if issue is on directive, then do not map.
             line
           else
-            line + totalLineOffset + 1
-        }))
+            (line + totalLineOffset + 1)
+        })
+          // removing invalid lines
+          // NOTE: somehow, BSP can report lines ≤ 0 and are usually
+          // duplicates of previous reports.
+          .filter(_ > 0)
+        )
       )
     }
 

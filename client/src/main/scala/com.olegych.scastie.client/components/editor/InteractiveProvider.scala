@@ -41,7 +41,8 @@ import scalajs.js.Thenable.Implicits._
 import js.JSConverters._
 
 case class InteractiveProvider(props: CodeEditor) {
-  private val scastieMetalsOptions = api.ScastieMetalsOptions(props.dependencies, props.target)
+
+  private val scastieMetalsOptions = api.ScastieMetalsOptions(props.dependencies, props.target, Some(props.value))
   private val isConfigurationSupported: Future[Boolean] = {
     if (props.metalsStatus == MetalsDisabled || props.isEmbedded) Future.successful(false)
     else {

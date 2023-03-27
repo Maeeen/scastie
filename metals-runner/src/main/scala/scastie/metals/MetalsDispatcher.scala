@@ -44,34 +44,54 @@ class MetalsDispatcher[F[_]: Async](cache: Cache[F, ScastieMetalsOptions, Scasti
    * @param configuration - scastie client configuration
    * @returns `EitherT[F, FailureType, ScastiePresentationCompiler]`
    */
-  def getCompiler(configuration: ScastieMetalsOptions): EitherT[F, FailureType, ScastiePresentationCompiler] = EitherT {
-    if !isSupportedVersion(configuration) then
-      Async[F].pure(
-        Left(
-          PresentationCompilerFailure(
-            s"Interactive features are not supported for Scala ${configuration.scalaTarget.binaryScalaVersion}."
-          )
-        )
-      )
-    else
-      Sync[F].delay(
-        mtagsResolver
-          .resolve(configuration.scalaTarget.scalaVersion)
-          .toRight(
-            PresentationCompilerFailure(
-              s"Mtags couldn't be resolved for target: ${configuration.scalaTarget.scalaVersion}."
+  def getCompiler(configuration: ScastieMetalsOptions): EitherT[F, FailureType, ScastiePresentationCompiler] =
+    if (configuration.scalaTarget.targetType == ScalaTargetType.ScalaCli) {
+      convertConfigurationFromScalaCli(configuration).flatMap(getCompiler(_))
+    } else {
+      EitherT {
+        if !isSupportedVersion(configuration) then
+          Async[F].pure(
+            Left(
+              PresentationCompilerFailure(
+                s"Interactive features are not supported for Scala ${configuration.scalaTarget.binaryScalaVersion}."
+              )
             )
           )
-      ) >>= (_.traverse(mtags =>
-        cache.getOrUpdateReleasable(configuration) {
-          initializeCompiler(configuration, mtags).map { newPC =>
-            Releasable(newPC, Sync[F].delay(newPC.underlyingPC.shutdown()))
-          }
-        }
-      ).recoverWith { case NonFatal(e) =>
-        logger.error(e.getMessage)
-        PresentationCompilerFailure(e.getMessage).asLeft.pure[F]
-      })
+        else
+          Sync[F].delay(
+            mtagsResolver
+              .resolve(configuration.scalaTarget.scalaVersion)
+              .toRight(
+                PresentationCompilerFailure(
+                  s"Mtags couldn't be resolved for target: ${configuration.scalaTarget.scalaVersion}."
+                )
+              )
+          ) >>= (_.traverse(mtags =>
+            cache.getOrUpdateReleasable(configuration) {
+              initializeCompiler(configuration, mtags).map { newPC =>
+                Releasable(newPC, Sync[F].delay(newPC.underlyingPC.shutdown()))
+              }
+            }
+          ).recoverWith { case NonFatal(e) =>
+            logger.error(e.getMessage)
+            PresentationCompilerFailure(e.getMessage).asLeft.pure[F]
+          })
+      }
+
+    }
+
+  /**
+    * This converts a configuration that targets Scala-CLI
+    * It extracts directives and expose a new configuration understandable
+    * by the runner.
+    */
+  private def convertConfigurationFromScalaCli(configuration: ScastieMetalsOptions): EitherT[F, FailureType, ScastieMetalsOptions] = EitherT {
+    if (configuration.scalaTarget.targetType == ScalaTargetType.ScalaCli) then
+      Async[F].pure {
+        Right(configuration)
+      }
+    else
+      Async[F].pure(Right(configuration))
   }
 
   /*
@@ -87,34 +107,38 @@ class MetalsDispatcher[F[_]: Async](cache: Cache[F, ScastieMetalsOptions, Scasti
    * In sbt it is automatically resolved but here, we manually specify scala target.
    */
   def areDependenciesSupported(configuration: ScastieMetalsOptions): EitherT[F, FailureType, Boolean] =
-    def scalaTargetString(scalaTarget: ScalaTarget): String =
-      s"${scalaTarget.scalaVersion}" ++ (if scalaTarget.targetType == ScalaTargetType.JS then
-                                           s" ${scalaTarget.targetType}"
-                                         else "")
+    if (configuration.scalaTarget.targetType == ScalaTargetType.ScalaCli) then
+      convertConfigurationFromScalaCli(configuration).flatMap(areDependenciesSupported(_))
+    else {
+      def scalaTargetString(scalaTarget: ScalaTarget): String =
+        s"${scalaTarget.scalaVersion}" ++ (if scalaTarget.targetType == ScalaTargetType.JS then
+                                            s" ${scalaTarget.targetType}"
+                                          else "")
 
-    def checkScalaVersionCompatibility(scalaTarget: ScalaTarget): Boolean =
-      if configuration.scalaTarget.binaryScalaVersion.startsWith("3") then
-        scalaTarget.binaryScalaVersion.startsWith("2.13") || scalaTarget.targetType == ScalaTargetType.Scala3
-      else scalaTarget.binaryScalaVersion == configuration.scalaTarget.binaryScalaVersion
+      def checkScalaVersionCompatibility(scalaTarget: ScalaTarget): Boolean =
+        if configuration.scalaTarget.binaryScalaVersion.startsWith("3") then
+          scalaTarget.binaryScalaVersion.startsWith("2.13") || scalaTarget.targetType == ScalaTargetType.Scala3
+        else scalaTarget.binaryScalaVersion == configuration.scalaTarget.binaryScalaVersion
 
-    def checkScalaJsCompatibility(scalaTarget: ScalaTarget): Boolean =
-      if configuration.scalaTarget.targetType == ScalaTargetType.JS then scalaTarget.targetType == ScalaTargetType.JS
-      else true
+      def checkScalaJsCompatibility(scalaTarget: ScalaTarget): Boolean =
+        if configuration.scalaTarget.targetType == ScalaTargetType.JS then scalaTarget.targetType == ScalaTargetType.JS
+        else true
 
-    val misconfiguredLibraries = configuration.dependencies
-      .filterNot(l => checkScalaVersionCompatibility(l.target) && checkScalaJsCompatibility(l.target))
+      val misconfiguredLibraries = configuration.dependencies
+        .filterNot(l => checkScalaVersionCompatibility(l.target) && checkScalaJsCompatibility(l.target))
 
-    Option
-      .when(misconfiguredLibraries.nonEmpty) {
-        val errorString = misconfiguredLibraries
-          .map(l =>
-            s"${l.toString} dependency  binary version is: ${scalaTargetString(l.target)} while scastie is set to: ${scalaTargetString(configuration.scalaTarget)}"
-          )
-          .mkString("\n")
-        PresentationCompilerFailure(s"Misconfigured dependencies: $errorString")
-      }
-      .toLeft(true)
-      .toEitherT
+      Option
+        .when(misconfiguredLibraries.nonEmpty) {
+          val errorString = misconfiguredLibraries
+            .map(l =>
+              s"${l.toString} dependency  binary version is: ${scalaTargetString(l.target)} while scastie is set to: ${scalaTargetString(configuration.scalaTarget)}"
+            )
+            .mkString("\n")
+          PresentationCompilerFailure(s"Misconfigured dependencies: $errorString")
+        }
+        .toLeft(true)
+        .toEitherT
+    }
 
   /*
    * Initializes the compiler with proper classpath and version
