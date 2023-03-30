@@ -20,6 +20,8 @@ import com.olegych.scastie.api.ScalaTarget._
 import coursierapi.{Dependency, Fetch}
 import org.slf4j.LoggerFactory
 
+import scastie.metals.ScalaCliParser
+
 /*
  * MetalsDispatcher is responsible for managing the lifecycle of presentation compilers.
  *
@@ -88,6 +90,9 @@ class MetalsDispatcher[F[_]: Async](cache: Cache[F, ScastieMetalsOptions, Scasti
   private def convertConfigurationFromScalaCli(configuration: ScastieMetalsOptions): EitherT[F, FailureType, ScastieMetalsOptions] = EitherT {
     if (configuration.scalaTarget.targetType == ScalaTargetType.ScalaCli) then
       Async[F].pure {
+        val res = ScalaCliParser.parse(configuration.code.get)
+        println(res)
+        Thread.sleep(10000)
         Right(configuration)
       }
     else
