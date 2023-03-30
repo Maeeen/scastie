@@ -48,10 +48,13 @@ object DTOCodecs {
     implicit val noResultEncoder: Encoder.AsObject[NoResult] = deriveEncoder[NoResult]
     implicit val presentationCompilerFailureEncoder: Encoder.AsObject[PresentationCompilerFailure] =
       deriveEncoder[PresentationCompilerFailure]
+    implicit val invalidScalaVersionEncoder: Encoder.AsObject[InvalidScalaVersion] =
+      deriveEncoder[InvalidScalaVersion]
 
     def apply(a: FailureType): Json = (a match
       case noResult: NoResult                     => noResult.asJsonObject
       case pcFailure: PresentationCompilerFailure => pcFailure.asJsonObject
+      case invScalaVersion: InvalidScalaVersion   => invScalaVersion.asJsonObject
     ).+:("_type" -> a.getClass.getCanonicalName.toString.asJson).asJson
 
   }

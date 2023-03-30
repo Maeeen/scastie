@@ -90,10 +90,10 @@ class MetalsDispatcher[F[_]: Async](cache: Cache[F, ScastieMetalsOptions, Scasti
   private def convertConfigurationFromScalaCli(configuration: ScastieMetalsOptions): EitherT[F, FailureType, ScastieMetalsOptions] = EitherT {
     if (configuration.scalaTarget.targetType == ScalaTargetType.ScalaCli) then
       Async[F].pure {
-        val res = ScalaCliParser.parse(configuration.code.get)
+        val res = ScalaCliParser.getScalaTarget(configuration.code.get)
         println(res)
         Thread.sleep(10000)
-        Right(configuration)
+        Right(res)
       }
     else
       Async[F].pure(Right(configuration))
