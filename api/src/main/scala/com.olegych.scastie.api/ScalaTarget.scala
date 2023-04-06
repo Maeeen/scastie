@@ -109,6 +109,29 @@ object ScalaTarget {
     )
   )
 
+  def fromScalaVersion(version: String): Option[ScalaTarget] = {
+    if (version.startsWith("3")) {
+      if (version == "3")
+        Some(ScalaTarget.Scala3(BuildInfo.latest3))
+      else 
+        Some(ScalaTarget.Scala3(version))
+    } else if (version.startsWith("2")) {
+      if (version == "2")
+        Some(ScalaTarget.Jvm(BuildInfo.latest213))
+      else if (version == "2.13") 
+        Some(ScalaTarget.Jvm(BuildInfo.latest213))
+      else if (version == "2.12")
+        Some(ScalaTarget.Jvm(BuildInfo.latest212))
+      else if (version == "2.11")
+        Some(ScalaTarget.Jvm(BuildInfo.latest211))
+      else if (version == "2.10")
+        Some(ScalaTarget.Jvm(BuildInfo.latest210))
+      else
+        Some(ScalaTarget.Jvm(version))
+    } else
+      None
+  }
+
   object Jvm {
     def default: ScalaTarget = ScalaTarget.Jvm(scalaVersion = BuildInfo.latest213)
   }
@@ -312,7 +335,8 @@ object ScalaTarget {
       """.stripMargin
   }
   
-  case class ScalaCli() extends ScalaTarget {
+  case class ScalaCli(scalaBinaryVersion0: String = "") extends ScalaTarget {
+    override def binaryScalaVersion: String = scalaBinaryVersion0
 
     override def scalaVersion: String = ""
 

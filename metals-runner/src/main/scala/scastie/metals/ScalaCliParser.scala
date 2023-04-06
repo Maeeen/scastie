@@ -13,6 +13,13 @@ import com.olegych.scastie.api.ScalaTarget
 import com.olegych.scastie.api.FailureType
 import com.olegych.scastie.api.InvalidScalaVersion
 import com.olegych.scastie.buildinfo.BuildInfo
+import com.olegych.scastie.api.ScastieMetalsOptions
+import com.virtuslab.using_directives.custom.utils.ast.SettingDefOrUsingValue
+import com.virtuslab.using_directives.custom.utils.ast.NumericLiteral
+import com.virtuslab.using_directives.custom.utils.ast.StringLiteral
+import com.olegych.scastie.api.PresentationCompilerFailure
+import com.olegych.scastie.api.ScalaDependency
+import com.olegych.scastie.api.ScalaTarget.ScalaCli
 
 object ScalaCliParser {
 
@@ -32,31 +39,48 @@ object ScalaCliParser {
     println(s"defs type ${allDefs.map(_.getValue().getClass())}")
     allDefs
 
-  def getScalaTarget(string: String): Either[ScalaTarget, FailureType] = {
+  private def extractValue(k: SettingDefOrUsingValue): String = {
+    k match
+      case k: NumericLiteral => k.getValue()
+      case k: StringLiteral => k.getValue()
+    
+  }
+
+  def getScalaTarget(string: String): Either[FailureType, ScastieMetalsOptions] = {
     // TODO: get it correctly
-    val defs = parse(string).groupMap(_.getKey())(_.getValue().toString())
+    val defs = parse(string).groupMap(_.getKey())(t => extractValue(t.getValue()))
 
     // get the scala version
     var scalaVersion = defs.get("scala").getOrElse(List(BuildInfo.latest3)).head
 
-    if (scalaVersion == "3") then scalaVersion = BuildInfo.latest3
-    else if (scalaVersion == "2") then scalaVersion = BuildInfo.latest213
-
     // now we have the scala version
     // get the target
-    val scalaTarget: Either[ScalaTarget, FailureType] =
-      if (scalaVersion.startsWith("3")) then
-        Left(ScalaTarget.Scala3(scalaVersion = scalaVersion))
-      else if (scalaVersion.startsWith("2")) then
-        Left(ScalaTarget.Jvm(scalaVersion = scalaVersion))
-      else
-        Right(InvalidScalaVersion(s"Invalid provided Scala version ${scalaVersion}"))
+    val scalaTarget: Either[FailureType, ScalaTarget] =
+      ScalaTarget.fromScalaVersion(scalaVersion) match
+        case None => Left(InvalidScalaVersion(s"Invalid Scala version $scalaVersion"))
+        case Some(target) => Right(target)
 
-    val dependencies = defs.get("dep").getOrElse(List()) ++ defs.get("lib").getOrElse(List())
+    scalaTarget.map { scalaTarget => {
+      val dependencies = defs.get("dep").getOrElse(List()) ++ defs.get("lib").getOrElse(List())
 
-    println(s"dependencies $dependencies")
+      println(s"dependencies $dependencies")
 
-    scalaTarget
+      val actualDependencies = dependencies.map(_.split(":").toList).flatMap {
+        // "groupId::artifact:version"
+        case List(groupId, "", artifactId, version) => List(ScalaDependency(groupId, artifactId, scalaTarget, version))
+        // "groupId:artifact:version"
+        case List(groupId, artifactId, version) => {
+          val split = artifactId.split("_")
+          val scalaLibVersion = split.last
+          val libname = split.init.mkString("_")
+          List(ScalaDependency(groupId, libname, ScalaCli(scalaLibVersion), version))
+        }
+
+        case _ => List()
+      }
+
+      ScastieMetalsOptions(actualDependencies.toSet, scalaTarget)
+    } }
   }
 
 }

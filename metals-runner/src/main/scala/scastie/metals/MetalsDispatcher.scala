@@ -52,7 +52,7 @@ class MetalsDispatcher[F[_]: Async](cache: Cache[F, ScastieMetalsOptions, Scasti
     } else {
       EitherT {
         if !isSupportedVersion(configuration) then
-          Async[F].pure(
+          Async[F].delay(
             Left(
               PresentationCompilerFailure(
                 s"Interactive features are not supported for Scala ${configuration.scalaTarget.binaryScalaVersion}."
@@ -87,17 +87,13 @@ class MetalsDispatcher[F[_]: Async](cache: Cache[F, ScastieMetalsOptions, Scasti
     * It extracts directives and expose a new configuration understandable
     * by the runner.
     */
-  private def convertConfigurationFromScalaCli(configuration: ScastieMetalsOptions): EitherT[F, FailureType, ScastieMetalsOptions] = EitherT {
+  private def convertConfigurationFromScalaCli(configuration: ScastieMetalsOptions): EitherT[F, FailureType, ScastieMetalsOptions] =
     if (configuration.scalaTarget.targetType == ScalaTargetType.ScalaCli) then
-      Async[F].pure {
-        val res = ScalaCliParser.getScalaTarget(configuration.code.get)
-        println(res)
-        Thread.sleep(10000)
-        Right(res)
-      }
+      val res = Async[F].delay ( ScalaCliParser.getScalaTarget(configuration.code.get) )
+      EitherT(res)
     else
-      Async[F].pure(Right(configuration))
-  }
+      EitherT.rightT(configuration)
+
 
   /*
    * Checks if given configuration is supported. Currently it is based on scala binary version.
