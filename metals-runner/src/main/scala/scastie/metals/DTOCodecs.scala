@@ -4,6 +4,7 @@ import com.olegych.scastie.api._
 import io.circe._
 import io.circe.generic.semiauto._
 import io.circe.syntax._
+import com.olegych.scastie.api.ScalaTarget._
 
 object DTOCodecs {
   import JavaConverters._
@@ -27,7 +28,24 @@ object DTOCodecs {
           case "ScalaCli"  => Right(ScalaTarget.ScalaCli())
         }
       )
+  }
+  
+  implicit val scalaTargetEncoder: Encoder[ScalaTarget] = new Encoder[ScalaTarget] {
+    def apply(a: ScalaTarget): Json = {
+      val supplementaryFields = a match
+          case Jvm(scalaVersion) => List("tpe" -> "Jvm")
+          case Typelevel(scalaVersion) => List("tpe" -> "Typelevel")
+          case Js(scalaVersion, scalaJsVersion) => List("tpe" -> "Js", "scalaJsVersion" -> scalaJsVersion)
+          case Native(scalaVersion, scalaNativeVersion) => List("tpe" -> "Native", "scalaNativeVersion" -> scalaNativeVersion)
+          case Scala3(scalaVersion) => List("tpe" -> "Scala3")
+          case ScalaCli(scalaBinaryVersion0) => List("tpe" -> "ScalaCli")
 
+      Json.fromFields(
+        (List("scalaVersion" -> a.scalaVersion) ++ supplementaryFields).map({
+          case (a1, a2) => (a1, Json.fromString(a2))
+        })
+      )
+    }
   }
 
   implicit val scalaDependencyDecoder: Decoder[ScalaDependency] = deriveDecoder

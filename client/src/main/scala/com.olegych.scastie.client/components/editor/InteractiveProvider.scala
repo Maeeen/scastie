@@ -42,27 +42,36 @@ import js.JSConverters._
 
 case class InteractiveProvider(props: CodeEditor) {
 
-  private val scastieMetalsOptions = api.ScastieMetalsOptions(props.dependencies, props.target, Some(props.value))
+
+  private var scastieMetalsOptions: Option[api.ScastieMetalsOptions] = None
+  private val defaultScastieMetalsOptions = api.ScastieMetalsOptions(props.dependencies, props.target, Some(props.value))
+  private def getScastieMetalsOptions = scastieMetalsOptions.getOrElse(defaultScastieMetalsOptions)
+
   private val isConfigurationSupported: Future[Boolean] = {
     if (props.metalsStatus == MetalsDisabled || props.isEmbedded) Future.successful(false)
     else {
       props.setMetalsStatus(MetalsLoading).runNow()
-      val res = makeRequest(scastieMetalsOptions, "isConfigurationSupported").map(maybeText =>
-        parseMetalsResponse[Boolean](maybeText).getOrElse(false)
+      val res = makeRequest(defaultScastieMetalsOptions, "isConfigurationSupported").map(maybeText =>
+        parseMetalsResponse[api.ScastieMetalsOptions](maybeText)
       )
       res.onComplete {
-        case Success(true) => props.setMetalsStatus(MetalsReady).runNow()
+        case Success(Some(config)) => {
+          scastieMetalsOptions = Some(config)
+          props.setMetalsStatus(MetalsReady).runNow()
+        }
+        case Success(None) => props.setMetalsStatus(NetworkError("Failed to parse option from Metals.")).runNow()
         case Failure(exception) => props.setMetalsStatus(NetworkError(exception.getMessage)).runNow()
         case _ =>
       }
-      res
+      res.map { _.isDefined }
     }
   }
 
   def extension: js.Array[Any] = js.Array[Any](autocompletion(autocompletionConfig), hovers)
 
+
   private def toLSPRequest(code: String, offset: Int): api.LSPRequestDTO = {
-    val scastieOptions = api.ScastieMetalsOptions(props.dependencies, props.target)
+    val scastieOptions = getScastieMetalsOptions
     val offsetParams = api.ScastieOffsetParams(code, offset, props.isWorksheetMode)
     api.LSPRequestDTO(scastieOptions, offsetParams)
   }
@@ -98,6 +107,9 @@ case class InteractiveProvider(props: CodeEditor) {
         case None =>
           None
         case Some(Left(api.PresentationCompilerFailure(msg))) =>
+          props.setMetalsStatus(MetalsConfigurationError(msg)).runNow()
+          None
+        case Some(Left(api.InvalidScalaVersion(msg))) =>
           props.setMetalsStatus(MetalsConfigurationError(msg)).runNow()
           None
         case Some(Left(api.NoResult(msg))) =>
@@ -160,7 +172,7 @@ case class InteractiveProvider(props: CodeEditor) {
    * Fetches documentation for selected completion
    */
   private def getCompletionInfo(completionItemDTO: api.CompletionItemDTO) = {
-    val scastieOptions = api.ScastieMetalsOptions(props.dependencies, props.target)
+    val scastieOptions = getScastieMetalsOptions
     val infoFunction: js.Function1[Completion, js.Promise[dom.Node]] = _ =>
       makeRequest(api.CompletionInfoRequest(scastieOptions, completionItemDTO), "completionItemResolve").map { maybeText =>
         parseMetalsResponse[String](maybeText).filter(_.nonEmpty).map { completionInfo =>
