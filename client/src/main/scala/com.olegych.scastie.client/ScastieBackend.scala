@@ -438,4 +438,8 @@ case class ScastieBackend(scastieId: UUID, serverUrl: Option[String], scope: Bac
       .map(_.set(Home))
       .getOrElse(Callback.empty)
   )
+
+  // Convert to Scala-CLI
+  val convertToScalaCli: Reusable[Callback] =
+    Reusable.always(scope.modState(_.convertToScalaCli))
 }
