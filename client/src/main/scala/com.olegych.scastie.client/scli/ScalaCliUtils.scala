@@ -28,7 +28,7 @@ object ScalaCliUtils {
   private def prependWithDirectives(scalaVersion: String, libraries: Set[ScalaDependency], code: String): String = {
     val dependencies = {
       if (libraries.size == 0) "" else {
-        libraries.map(dep => s"""//> using dep "${dep.artifact}::${dep.groupId}::${dep.version}"""").mkString("\n")
+        "\n" + libraries.map(dep => s"""//> using dep "${dep.groupId}::${dep.artifact}::${dep.version}"""").mkString("\n")
       }
     }
 
