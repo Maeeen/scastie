@@ -27,7 +27,9 @@ final case class EditorTopBar(clear: Reusable[Callback],
                               isWorksheetMode: Boolean,
                               metalsStatus: MetalsStatus,
                               toggleMetalsStatus: Reusable[Callback],
-                              scalaTarget: ScalaTarget) {
+                              scalaTarget: ScalaTarget,
+                              isMetalsStale: Boolean,
+                              reloadStaleMetals: Reusable[Callback]) {
   @inline def render: VdomElement = EditorTopBar.component(this)
 }
 
@@ -70,6 +72,10 @@ object EditorTopBar {
       props.toggleWorksheetMode,
       props.view.value
     ).render
+
+    val metalsReloadButton = ReloadStaleMetals(
+      props.reloadStaleMetals
+    ).render.when(props.isMetalsStale)
 
     val metalsButton = MetalsStatusIndicator(
       props.metalsStatus,
@@ -121,6 +127,7 @@ object EditorTopBar {
         downloadButton,
         embeddedModalButton,
         metalsButton,
+        metalsReloadButton,
       )
     )
   }

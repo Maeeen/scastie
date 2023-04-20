@@ -11,6 +11,7 @@ import japgolly.scalajs.react.util.Effect.Id
 import org.scalajs.dom.{Position => _, _}
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 case class ScastieBackend(scastieId: UUID, serverUrl: Option[String], scope: BackendScope[Scastie, ScastieState]) {
@@ -25,8 +26,32 @@ case class ScastieBackend(scastieId: UUID, serverUrl: Option[String], scope: Bac
     Callback(Global.subscribe(scope, scastieId))
   }
 
+  val reloadStaleMetals: Reusable[Callback] =
+    Reusable.always { scope.modState({ state => {
+      previousDirectives = Some(takeDirectives(state.inputs))
+      state.copyAndSave(isMetalsStale = false) 
+    } }) }
+
+  private def takeDirectives(inp: Inputs) = inp.code.split("\n").takeWhile(_.startsWith("//>")).toList
+
+  private var previousDirectives: Option[List[String]] = None
+  val checkIfMetalsStale = scope.modState(state => {
+    val newDirectives = takeDirectives(state.inputs)
+    previousDirectives match {
+      case None => { previousDirectives = Some(newDirectives); state }
+      case Some(previousDirectives) if previousDirectives != newDirectives => state.copy(isMetalsStale = true)
+      case _ => state
+    }
+  }).async.debounce(5.second)
+
   val codeChange: String ~=> Callback =
-    Reusable.fn(code => scope.modState(_.setCode(code)))
+    Reusable.fn(code => {
+      checkIfMetalsStale.runNow()
+      scope.modState(state => {
+        val newState = state.setCode(code)
+        newState
+      })
+    })
 
   val sbtConfigChange: String ~=> Callback = {
     Reusable.fn(newConfig => scope.modState(_.setSbtConfigExtra(newConfig)))
@@ -106,7 +131,7 @@ case class ScastieBackend(scastieId: UUID, serverUrl: Option[String], scope: Bac
     Reusable.fn(status => scope.modState(_.setMetalsStatus(status)))
 
   val toggleMetalsStatus: Reusable[Callback] =
-    Reusable.always(scope.modState(_.toggleMetalsStatus))
+    Reusable.always(scope.modState({ state => previousDirectives = None; state.toggleMetalsStatus }))
 
   val toggleLineNumbers: Reusable[Callback] =
     Reusable.always(scope.modState(_.toggleLineNumbers))
