@@ -35,23 +35,30 @@ object ScalaCliParser {
     val defs = parser.parse().getUsingDefs().asScala.toList 
     val allDefs = defs.flatMap(_.getSettingDefs().getSettings().asScala)
 
-    println(s"defs $allDefs")
-    println(s"defs type ${allDefs.map(_.getValue().getClass())}")
     allDefs
 
-  private def extractValue(k: SettingDefOrUsingValue): String = {
+  private def extractValue(k: SettingDefOrUsingValue): Option[String] = {
     k match
-      case k: NumericLiteral => k.getValue()
-      case k: StringLiteral => k.getValue()
+      case k: NumericLiteral => Some(k.getValue())
+      case k: StringLiteral => Some(k.getValue())
+      case _ => None
     
   }
 
   def getScalaTarget(string: String): Either[FailureType, ScastieMetalsOptions] = {
     // TODO: get it correctly
-    val defs = parse(string).groupMap(_.getKey())(t => extractValue(t.getValue()))
+    //val defs: Map[String, List[String]] = parse(string).groupMap(_.getKey())(t => extractValue(t.getValue()).toList)
+    val defs: Map[String, List[String]] = parse(string).groupMapReduce(
+      _.getKey()
+    )(
+      t => {
+        val option = extractValue(t.getValue())
+        option.toList
+      }
+    )(_ ++ _)
 
     // get the scala version
-    var scalaVersion = defs.get("scala").getOrElse(List(BuildInfo.latest3)).head
+    var scalaVersion = defs.get("scala").getOrElse(List(BuildInfo.latest3)).headOption.getOrElse("3")
 
     // now we have the scala version
     // get the target
@@ -62,8 +69,6 @@ object ScalaCliParser {
 
     scalaTarget.map { scalaTarget => {
       val dependencies = defs.get("dep").getOrElse(List()) ++ defs.get("lib").getOrElse(List())
-
-      println(s"dependencies $dependencies")
 
       val actualDependencies = dependencies.map(_.split(":").toList).flatMap {
         // "groupId::artifact:version"

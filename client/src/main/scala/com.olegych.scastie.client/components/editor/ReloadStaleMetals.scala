@@ -19,7 +19,7 @@ object ReloadStaleMetals {
       cls := "btn editor reload-metals-btn",
       onClick --> props.reload
     )(
-      i(cls := "fa fa-reload"),
+      i(cls := "fa fa-refresh"),
       span("Reload metals")
     )
   }
