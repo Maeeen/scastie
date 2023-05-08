@@ -60,6 +60,8 @@ class ScliRunnerTest extends AnyFunSuite with BeforeAndAfterAll {
     ))
   }
 
+  // Normal/worksheet mode and warnings
+
   override protected def afterAll(): Unit = {
     scliRunner.map(_.end)
     scliRunner = None
