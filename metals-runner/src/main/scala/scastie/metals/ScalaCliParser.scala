@@ -35,8 +35,6 @@ object ScalaCliParser {
     val defs = parser.parse().getUsingDefs().asScala.toList 
     val allDefs = defs.flatMap(_.getSettingDefs().getSettings().asScala)
 
-    println(s"defs $allDefs")
-    println(s"defs type ${allDefs.map(_.getValue().getClass())}")
     allDefs
 
   private def extractValue(k: SettingDefOrUsingValue): String = {
@@ -62,8 +60,6 @@ object ScalaCliParser {
 
     scalaTarget.map { scalaTarget => {
       val dependencies = defs.get("dep").getOrElse(List()) ++ defs.get("lib").getOrElse(List())
-
-      println(s"dependencies $dependencies")
 
       val actualDependencies = dependencies.map(_.split(":").toList).flatMap {
         // "groupId::artifact:version"
