@@ -80,7 +80,8 @@ object MainPanel {
         target = state.inputs.target,
         metalsStatus = state.metalsStatus,
         setMetalsStatus = backend.setMetalsStatus,
-        dependencies = state.inputs.libraries
+        dependencies = state.inputs.libraries,
+        isMetalsStale = state.isMetalsStale
       ).render
 
     val console =
@@ -162,7 +163,9 @@ object MainPanel {
         isWorksheetMode = state.inputs.isWorksheetMode,
         metalsStatus = state.metalsStatus,
         toggleMetalsStatus = backend.toggleMetalsStatus,
-        scalaTarget = state.inputs.target
+        scalaTarget = state.inputs.target,
+        isMetalsStale = state.isMetalsStale,
+        reloadStaleMetals = backend.reloadStaleMetals
       ).render.unless(props.isEmbedded || state.isPresentationMode)
 
     val statusView =

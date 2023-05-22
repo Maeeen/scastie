@@ -21,15 +21,19 @@ object DTOExtensions {
         if offsetParams.isWorksheetMode then
           val (userDirectives, userCode) = offsetParams.content.split("\n").span(_.startsWith("//>"))
 
-          val adjustedContent = s"""${userDirectives.mkString("\n")}\n$wrapperObject${userCode.mkString("\n" + ident)}}"""
+          val userDirectivesEndingWithLR = if (userDirectives.size == 0) then "" else userDirectives.mkString("", "\n", "\n")
+
+          val adjustedContent = s"""$userDirectivesEndingWithLR$wrapperObject${userCode.mkString("\n" + ident)}}"""
 
           val userDirectivesLength = userDirectives.map(_.length + 1).sum
           if (offsetParams.offset < userDirectivesLength) then
             // cursor is in directives
             (adjustedContent, offsetParams.offset)
           else
+
+            val adjustedPosition = wrapperObject.length + offsetParams.offset + (userCode.length - 1) * ident.length
             // cursor is in code
-            (adjustedContent, wrapperObject.length + offsetParams.offset + (userCode.length - 1) * ident.length + 1)
+            (adjustedContent, adjustedPosition)
 
         else (offsetParams.content, offsetParams.offset)
 

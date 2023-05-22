@@ -113,7 +113,8 @@ case class ScastieState(
     isEmbedded: Boolean = false,
     transient: Boolean = false,
 
-    scalaCliConversionError: Option[String] = None
+    scalaCliConversionError: Option[String] = None,
+    isMetalsStale: Boolean = false
 ) {
   def snippetId: Option[SnippetId] = snippetState.snippetId
   def loadSnippet: Boolean = snippetState.loadSnippet
@@ -140,7 +141,8 @@ case class ScastieState(
       status: StatusState = status,
       metalsStatus: MetalsStatus = metalsStatus,
       transient: Boolean = transient,
-      scalaCliConversionError: Option[String] = scalaCliConversionError
+      scalaCliConversionError: Option[String] = scalaCliConversionError,
+      isMetalsStale: Boolean = isMetalsStale
   ): ScastieState = {
     val state0 =
       copy(
@@ -171,7 +173,8 @@ case class ScastieState(
         metalsStatus = metalsStatus,
         isEmbedded = isEmbedded,
         transient = transient,
-        scalaCliConversionError = scalaCliConversionError
+        scalaCliConversionError = scalaCliConversionError,
+        isMetalsStale = isMetalsStale
       )
 
     if (!isEmbedded && !transient) {
@@ -212,7 +215,7 @@ case class ScastieState(
     copyAndSave(metalsStatus = status)
 
   def toggleMetalsStatus: ScastieState =
-    copyAndSave(metalsStatus = if (metalsStatus != MetalsDisabled) MetalsDisabled else MetalsLoading)
+    copyAndSave(metalsStatus = if (metalsStatus != MetalsDisabled) MetalsDisabled else MetalsLoading, isMetalsStale = false)
 
   def toggleLineNumbers: ScastieState =
     copyAndSave(showLineNumbers = !showLineNumbers)
