@@ -240,6 +240,7 @@ class DispatchActor(progressActor: ActorRef, statusActor: ActorRef)
     case progress: SnippetProgress => 
       val sender = this.sender()
       
+
       logError(
         container.appendOutput(progress)
           .recover {

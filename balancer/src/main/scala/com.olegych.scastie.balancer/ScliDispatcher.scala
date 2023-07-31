@@ -51,6 +51,7 @@ class ScliDispatcher(config: Config, progressActor: ActorRef, statusActor: Actor
       giveTask
     }
 
+
   private def giveTask = {
     if (!taskQueue.isEmpty) {
       val (task, newTaskQueue) = taskQueue.dequeue
